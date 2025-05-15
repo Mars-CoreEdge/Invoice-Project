@@ -12,30 +12,6 @@ app.use(express.json());
 // Store ongoing interactions
 const interactions = new Map();
 
-// Mock database
-let invoices = [
-  {
-    id: 'INV-001',
-    customer: 'Acme Corp',
-    amount: 1500.00,
-    date: '2024-03-15',
-    status: 'paid',
-    items: [
-      { description: 'Web Development', quantity: 1, price: 1500.00 }
-    ]
-  },
-  {
-    id: 'INV-002',
-    customer: 'TechStart Inc',
-    amount: 2300.00,
-    date: '2024-03-18',
-    status: 'pending',
-    items: [
-      { description: 'UI Design', quantity: 1, price: 1800.00 },
-      { description: 'Consultation', quantity: 2, price: 250.00 }
-    ]
-  }
-];
 
 // Sample invoice data
 const sampleInvoices = [
@@ -239,18 +215,32 @@ const getTotalInvoicesTool = tool({
   description: 'Get the total number of invoices and their cumulative value',
   parameters: z.object({
     status: z.enum(['all', 'paid', 'pending', 'overdue'])
-      .describe('Filter invoices by status. Use "all" to count all invoices.')
+      .describe('Filter invoices by status. Use "all" to count all invoices, "paid" for paid invoices, "pending" for pending invoices, or "overdue" for overdue invoices.')
   }),
   execute: async ({ status }) => {
-    const filteredInvoices = status === 'all' 
-      ? sampleInvoices 
-      : sampleInvoices.filter(inv => inv.status === status);
-    
-    const total = filteredInvoices.reduce((sum, inv) => sum + inv.amount, 0);
-    
-    return {
-      message: `There ${filteredInvoices.length === 1 ? 'is' : 'are'} ${filteredInvoices.length} ${status === 'all' ? 'total' : status} ${filteredInvoices.length === 1 ? 'invoice' : 'invoices'} with a total value of $${total.toLocaleString()}.`
-    };
+    try {
+      console.log(`Executing getTotalInvoices with status: ${status}`);
+      
+      // Use the sampleInvoices array which has all 5 invoices
+      const filteredInvoices = status === 'all' 
+        ? sampleInvoices 
+        : sampleInvoices.filter(inv => inv.status === status);
+      
+      const total = filteredInvoices.reduce((sum, inv) => sum + inv.amount, 0);
+      
+      const result = {
+        count: filteredInvoices.length,
+        total: total,
+        formatted: `There ${filteredInvoices.length === 1 ? 'is' : 'are'} ${filteredInvoices.length} ${status === 'all' ? 'total' : status} ${filteredInvoices.length === 1 ? 'invoice' : 'invoices'} with a total value of $${total.toLocaleString()}.`,
+        status: status
+      };
+      
+      console.log(`getTotalInvoices result:`, result);
+      return result;
+    } catch (error) {
+      console.error(`Error in getTotalInvoices:`, error);
+      throw error;
+    }
   }
 });
 
@@ -276,50 +266,106 @@ app.post('/api/chat', async (req, res) => {
     const interaction = interactions.get(interactionId);
     interaction.messages = messages; // Replace with the current messages
 
+    // Set response headers for streaming
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    
+    // Create tools object for AI SDK
+    const tools = {
+      getInvoiceDetails: getInvoiceDetailsTool,
+      createInvoice: createInvoiceTool,
+      updateInvoice: updateInvoiceTool,
+      getTotalInvoices: getTotalInvoicesTool
+    };
+
+    // Add a system prompt to encourage tool usage
+    const systemPrompt = `You are an AI assistant specialized in invoice management.
+When asked about invoices, ALWAYS use the appropriate tool instead of making up information.
+Available tools:
+- getTotalInvoices: Use this to get the total number and value of invoices filtered by status (all, paid, pending, overdue)
+- getInvoiceDetails: Use this to get detailed information about a specific invoice by its ID
+- createInvoice: Use this to create a new invoice
+- updateInvoice: Use this to update an existing invoice
+
+IMPORTANT: If the user asks about invoice counts, totals, or status, you MUST use the getTotalInvoices tool.`;
+
+    console.log("Starting streamText with messages:", messages.length);
+    
     // Set up streaming with AI SDK
     const { textStream, toolCalls } = await streamText({
       model: openai('gpt-4o'),
+      system: systemPrompt,
       messages: messages.map(msg => ({
         role: msg.role,
         content: msg.content
       })),
-      tools: [
-        getInvoiceDetailsTool,
-        createInvoiceTool,
-        updateInvoiceTool,
-        getTotalInvoicesTool
-      ]
+      tools,
+      maxSteps: 3, // Allow multiple steps of tool execution
+      temperature: 0, // Lower temperature for more deterministic tool calling
+      toolChoice: "auto", // Explicitly set to auto to ensure tools can be used
+      toolCallStreaming: true, // Enable tool call streaming to properly track calls
     });
 
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    
-    // Stream the response text to the client
+    // Stream initial response
+    let textContent = '';
     for await (const textPart of textStream) {
+      textContent += textPart;
+      console.log(textContent)
       res.write(textPart);
     }
-
-    // Process any tool calls that were made
-    if (toolCalls.length > 0) {
+    
+    console.log(`Text stream completed. Tools called: ${toolCalls ? toolCalls.length : 0}`);
+    
+    // Let the client know we're processing tools (if any)
+    if (toolCalls && toolCalls.length > 0) {
       interaction.status = 'processing_tools';
+      res.write('\n\n[Processing tools...]');
       
+      // Process each tool call
       for (const toolCall of toolCalls) {
         try {
-          // The tool execution is handled automatically by the AI SDK
-          const result = await toolCall.result;
+          console.log(`Executing tool: ${toolCall.name} with args:`, toolCall.args);
+          
+          // Wait for tool execution result with timeout
+          const resultPromise = toolCall.result;
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Tool execution timed out')), 5000)
+          );
+          
+          const result = await Promise.race([resultPromise, timeoutPromise]);
           interaction.result = result;
           
-          // Send the tool result to the client
+          console.log(`Tool result:`, result);
+          
+          // Format the tool result for display
+          let resultDisplay = '';
+          
           if (typeof result === 'object') {
-            res.write(`\n\nTool Result: ${JSON.stringify(result, null, 2)}`);
+            if (result === null) {
+              resultDisplay = 'null';
+            } else if (result.message) {
+              // If there's a message property, use that directly
+              resultDisplay = result.message;
+            } else {
+              // Otherwise prettify the JSON
+              resultDisplay = JSON.stringify(result, null, 2);
+            }
           } else {
-            res.write(`\n\nTool Result: ${result}`);
+            resultDisplay = String(result);
           }
+          
+          // Send the formatted tool result to the client
+          res.write(`\n\n[Tool ${toolCall.name} Result]: ${resultDisplay}`);
         } catch (error) {
+          console.error(`Tool execution error:`, error);
           interaction.status = 'error';
           interaction.error = error.message;
-          res.write(`\n\nTool Error: ${error.message}`);
+          res.write(`\n\n[Tool Error]: ${error.message}`);
         }
       }
+    } else {
+      console.log("No tools were called in this response");
     }
 
     interaction.status = 'completed';

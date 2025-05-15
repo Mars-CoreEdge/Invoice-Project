@@ -5,6 +5,7 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   isStreaming?: boolean;
+  toolResults?: string[];
 }
 
 interface Tool {
@@ -43,30 +44,171 @@ export const ChatPanel: React.FC = () => {
     }
   }, [input]);
 
-  const streamResponse = async (response: string) => {
-    const newMessage: Message = { role: 'assistant', content: '', isStreaming: true };
+  const handleTextStreaming = async (response: Response) => {
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    
+    // Create a new message for the assistant response
+    const newMessage: Message = { 
+      role: 'assistant', 
+      content: '', 
+      isStreaming: true,
+      toolResults: []
+    };
+    
     setMessages(prev => [...prev, newMessage]);
     
-    let streamedContent = '';
-    for (let i = 0; i < response.length; i++) {
-      await new Promise(resolve => setTimeout(resolve, 30));
-      streamedContent += response[i];
+    let buffer = '';
+    let currentContent = '';
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          break;
+        }
+        
+        // Decode the chunk and add to buffer
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Check if we have tool results in the buffer
+        if (buffer.includes('[Tool ') || buffer.includes('[Processing tools...]')) {
+          // Split buffer by tool markers
+          const parts = buffer.split(/\n\n\[(?:Tool |Processing tools...|Tool Error)/);
+          
+          if (parts.length > 1) {
+            // First part is the AI response
+            currentContent = parts[0];
+            
+            // Remaining parts are tool results or processing messages
+            const toolResults: string[] = [];
+            
+            for (let i = 1; i < parts.length; i++) {
+              let part = parts[i];
+              if (part) {
+                // Add back the prefix that was removed in split
+                if (part.startsWith(' ')) {
+                  part = 'Tool' + part;
+                } else if (part.includes('Result]')) {
+                  part = 'Tool ' + part;
+                } else if (part.includes('Error]')) {
+                  part = 'Tool Error' + part;
+                } else {
+                  part = 'Processing tools...' + part;
+                }
+                toolResults.push('[' + part);
+              }
+            }
+            
+            // Update message with both content and tool results
+            setMessages(prev => 
+              prev.map((msg, idx) => 
+                idx === prev.length - 1 
+                  ? { ...msg, content: currentContent, toolResults }
+                  : msg
+              )
+            );
+          } else {
+            // Update message with just the content
+            setMessages(prev => 
+              prev.map((msg, idx) => 
+                idx === prev.length - 1 
+                  ? { ...msg, content: buffer }
+                  : msg
+              )
+            );
+          }
+        } else {
+          // Regular text update
+          setMessages(prev => 
+            prev.map((msg, idx) => 
+              idx === prev.length - 1 
+                ? { ...msg, content: buffer }
+                : msg
+            )
+          );
+        }
+      }
+      
+      // Final decode to catch any remaining bytes
+      const remaining = decoder.decode();
+      if (remaining) {
+        buffer += remaining;
+        
+        // Do one final update with the complete content
+        if (buffer.includes('[Tool ') || buffer.includes('[Processing tools...]')) {
+          // Split buffer by tool markers
+          const parts = buffer.split(/\n\n\[(?:Tool |Processing tools...|Tool Error)/);
+          
+          if (parts.length > 1) {
+            // First part is the AI response
+            currentContent = parts[0];
+            
+            // Remaining parts are tool results
+            const toolResults: string[] = [];
+            
+            for (let i = 1; i < parts.length; i++) {
+              let part = parts[i];
+              if (part) {
+                // Add back the prefix that was removed in split
+                if (part.startsWith(' ')) {
+                  part = 'Tool' + part;
+                } else if (part.includes('Result]')) {
+                  part = 'Tool ' + part;
+                } else if (part.includes('Error]')) {
+                  part = 'Tool Error' + part;
+                } else {
+                  part = 'Processing tools...' + part;
+                }
+                toolResults.push('[' + part);
+              }
+            }
+            
+            // Update message with both content and tool results
+            setMessages(prev => 
+              prev.map((msg, idx) => 
+                idx === prev.length - 1 
+                  ? { ...msg, content: currentContent, toolResults, isStreaming: false }
+                  : msg
+              )
+            );
+          } else {
+            // Update message with just the content
+            setMessages(prev => 
+              prev.map((msg, idx) => 
+                idx === prev.length - 1 
+                  ? { ...msg, content: buffer, isStreaming: false }
+                  : msg
+              )
+            );
+          }
+        } else {
+          // Regular text update
+          setMessages(prev => 
+            prev.map((msg, idx) => 
+              idx === prev.length - 1 
+                ? { ...msg, content: buffer, isStreaming: false }
+                : msg
+            )
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error reading stream:', error);
+      // Mark message as no longer streaming
       setMessages(prev => 
         prev.map((msg, idx) => 
           idx === prev.length - 1 
-            ? { ...msg, content: streamedContent }
+            ? { ...msg, isStreaming: false }
             : msg
         )
       );
     }
-
-    setMessages(prev => 
-      prev.map((msg, idx) => 
-        idx === prev.length - 1 
-          ? { ...msg, isStreaming: false }
-          : msg
-      )
-    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -89,28 +231,34 @@ export const ChatPanel: React.FC = () => {
         }),
       });
 
-      // Check the content type of the response
+      setIsTyping(false);
+      
+      // Use the streaming reader approach for both text/plain and application/json
       const contentType = response.headers.get('content-type');
       
       if (contentType?.includes('application/json')) {
-        // Handle JSON response
+        // Handle JSON response (legacy method)
         const data = await response.json();
-        setIsTyping(false);
-        
         if (data.content) {
-          await streamResponse(data.content);
+          const newMessage: Message = { role: 'assistant', content: data.content };
+          setMessages(prev => [...prev, newMessage]);
         }
       } else {
-        // Handle text response
-        const text = await response.text();
-        setIsTyping(false);
-        await streamResponse(text);
+        // Handle streaming text response
+        await handleTextStreaming(response);
       }
     } catch (error) {
       console.error('Error sending message:', error);
       setIsTyping(false);
+      
       // Show error in the chat
-      await streamResponse(`Error: ${error instanceof Error ? error.message : 'Failed to send message'}`);
+      setMessages(prev => [
+        ...prev, 
+        { 
+          role: 'assistant', 
+          content: `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`
+        }
+      ]);
     }
   };
 
@@ -149,7 +297,7 @@ export const ChatPanel: React.FC = () => {
               initial="hidden"
               animate="visible"
               exit="exit"
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'}`}
             >
               <div
                 className={`max-w-[80%] rounded-2xl px-4 py-3 ${
@@ -160,6 +308,20 @@ export const ChatPanel: React.FC = () => {
               >
                 <p className="text-sm whitespace-pre-wrap">{message.content}</p>
               </div>
+              
+              {/* Tool Results */}
+              {message.toolResults && message.toolResults.length > 0 && (
+                <div className="mt-2 max-w-[80%] w-full space-y-2">
+                  {message.toolResults.map((result, idx) => (
+                    <div 
+                      key={idx}
+                      className="bg-gray-100/70 backdrop-blur-sm rounded-lg p-3 text-xs font-mono whitespace-pre-wrap text-gray-800 border-l-4 border-amber-400"
+                    >
+                      {result}
+                    </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>
