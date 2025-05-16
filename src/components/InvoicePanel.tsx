@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Menu } from '@headlessui/react';
+import { QuickbooksConnect } from './QuickbooksConnect';
 
 interface Invoice {
   id: string;
@@ -21,6 +22,7 @@ export const InvoicePanel: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [dataSource, setDataSource] = useState<'local' | 'quickbooks'>('local');
 
   useEffect(() => {
     fetchInvoices();
@@ -31,11 +33,17 @@ export const InvoicePanel: React.FC = () => {
       const response = await fetch('http://localhost:3001/api/invoices');
       const data = await response.json();
       setInvoices(data.invoices || []);
+      setDataSource('local');
     } catch (error) {
       console.error('Error fetching invoices:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleQuickbooksInvoices = (quickbooksInvoices: any[]) => {
+    setInvoices(quickbooksInvoices);
+    setDataSource('quickbooks');
   };
 
   const getStatusColor = (status: string) => {
@@ -87,7 +95,15 @@ export const InvoicePanel: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800">Invoices</h2>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-800">Invoices</h2>
+        <div className="text-sm text-gray-500">
+          Data source: <span className="font-medium">{dataSource === 'quickbooks' ? 'QuickBooks' : 'Local'}</span>
+        </div>
+      </div>
+      
+      {/* QuickBooks Integration */}
+      <QuickbooksConnect onFetchInvoices={handleQuickbooksInvoices} />
       
       {/* Controls */}
       <div className="mb-6 space-y-4">
@@ -190,9 +206,7 @@ export const InvoicePanel: React.FC = () => {
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(invoice.status)}`}>
                     {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
                   </span>
-                  <button className="text-indigo-600 hover:text-indigo-800 text-sm font-medium transition-colors duration-200">
-                    View Details →
-                  </button>
+
                 </div>
               </motion.div>
             ))}

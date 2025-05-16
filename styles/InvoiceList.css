@@ -1,0 +1,174 @@
+.invoice-list-container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.invoice-list-container h2 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.invoice-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.invoice-item {
+  border: 1px solid #eaeaea;
+  border-radius: 8px;
+  padding: 16px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background-color: #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  transition: all 0.2s ease;
+}
+
+.invoice-item:hover {
+  box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+  transform: translateY(-2px);
+}
+
+.invoice-item.highlight {
+  background-color: #f7fdff;
+  border-color: #0096ff;
+  box-shadow: 0 0 0 2px rgba(0, 150, 255, 0.2);
+}
+
+.invoice-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.invoice-id {
+  font-weight: 600;
+  color: #444;
+}
+
+.invoice-status {
+  font-size: 0.85rem;
+  padding: 3px 10px;
+  border-radius: 12px;
+  text-transform: capitalize;
+  font-weight: 500;
+}
+
+.status-paid {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status-pending {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.status-overdue {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.invoice-customer {
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: #333;
+}
+
+.invoice-amount {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 6px;
+}
+
+.invoice-date {
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 15px;
+}
+
+.view-detail-button {
+  cursor: pointer;
+  color: #0096ff;
+  font-weight: 500;
+  text-align: right;
+  padding: 5px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  margin-top: 10px;
+  border-top: 1px solid #eaeaea;
+  padding-top: 12px;
+  text-align: center;
+}
+
+.view-detail-button:hover {
+  background-color: #f0f9ff;
+  text-decoration: underline;
+}
+
+.view-detail-button:active {
+  background-color: #e0f0ff;
+  transform: scale(0.98);
+}
+
+/* Loading state */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+.spinner {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #3498db;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 15px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Error state */
+.error-container {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 16px;
+  border-radius: 6px;
+  text-align: center;
+  margin-top: 20px;
+}
+
+.retry-button {
+  margin-top: 10px;
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.retry-button:hover {
+  background-color: #c82333;
+}
+
+.no-invoices {
+  text-align: center;
+  padding: 40px 0;
+  color: #666;
+  font-style: italic;
+} 

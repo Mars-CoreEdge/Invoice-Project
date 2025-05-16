@@ -12,6 +12,7 @@
     "@vercel/sdk": "^1.7.3",
     "ai": "^4.3.15",
     "autoprefixer": "^10.4.14",
+    "axios": "^1.9.0",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^4.18.2",
@@ -22,8 +23,11 @@
     "postcss": "^8.4.21",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-markdown": "^10.1.0",
     "react-scripts": "5.0.1",
+    "react-syntax-highlighter": "^15.6.1",
     "recharts": "^2.15.3",
+    "remark-gfm": "^4.0.1",
     "tailwindcss": "^3.3.0",
     "typescript": "^4.9.5",
     "vercel": "^33.5.3",
@@ -56,6 +60,7 @@
     ]
   },
   "devDependencies": {
+    "@types/react-syntax-highlighter": "^15.5.13",
     "concurrently": "^8.2.2"
   }
 }

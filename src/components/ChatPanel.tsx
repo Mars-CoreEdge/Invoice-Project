@@ -1,5 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import remarkGfm from 'remark-gfm';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -304,9 +308,49 @@ export const ChatPanel: React.FC = () => {
                   message.role === 'user'
                     ? 'bg-indigo-600 text-white'
                     : 'bg-white/70 backdrop-blur-sm text-gray-800'
-                } ${message.isStreaming ? 'border-l-4 border-indigo-400 animate-pulse' : ''}`}
+                } ${message.isStreaming ? 'border-l-4 border-indigo-400' : ''}`}
               >
-                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                {message.role === 'user' ? (
+                  <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                ) : (
+                  <ReactMarkdown 
+                    components={{
+                      p: ({node, ...props}) => <p className="text-sm whitespace-pre-wrap" {...props} />,
+                      a: ({node, ...props}) => <a className="text-blue-600 hover:underline" {...props} />,
+                      ul: ({node, ...props}) => <ul className="list-disc pl-5 my-2" {...props} />,
+                      ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-2" {...props} />,
+                      li: ({node, ...props}) => <li className="my-1" {...props} />,
+                      h1: ({node, ...props}) => <h1 className="text-xl font-bold my-2" {...props} />,
+                      h2: ({node, ...props}) => <h2 className="text-lg font-bold my-2" {...props} />,
+                      h3: ({node, ...props}) => <h3 className="text-base font-bold my-2" {...props} />,
+                      table: ({node, ...props}) => <table className="border-collapse border border-gray-300 my-2 w-full" {...props} />,
+                      thead: ({node, ...props}) => <thead className="bg-gray-100" {...props} />,
+                      tbody: ({node, ...props}) => <tbody {...props} />,
+                      tr: ({node, ...props}) => <tr className="border-b border-gray-300" {...props} />,
+                      th: ({node, ...props}) => <th className="border border-gray-300 px-2 py-1 font-bold" {...props} />,
+                      td: ({node, ...props}) => <td className="border border-gray-300 px-2 py-1" {...props} />,
+                      code: ({node, inline, className, ...props}: {node?: any, inline?: boolean, className?: string} & React.HTMLAttributes<HTMLElement>) => 
+                        inline ? 
+                          <code className="bg-gray-100 px-1 py-0.5 rounded" {...props} /> : 
+                          <SyntaxHighlighter
+                            language={(className?.split('-')[1] || 'text') as string}
+                            style={atomDark}
+                            customStyle={{
+                              backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                              padding: '1em',
+                              borderRadius: '4px',
+                              fontSize: '0.8em',
+                              margin: '0.5em 0'
+                            }}
+                          >
+                            {props.children as string}
+                          </SyntaxHighlighter>
+                    }}
+                    remarkPlugins={[remarkGfm]}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
+                )}
               </div>
               
               {/* Tool Results */}
